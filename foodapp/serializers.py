@@ -1,36 +1,35 @@
 from rest_framework import serializers
-from .models import *
-
+from .models import Recipe, FoodLike, SaveRecipe, FoodComment, CommentLike, Category, Ingredient, Instruction
+from userapp.models import Users
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = Users
         fields = ('id', 'username', 'photo')
-        ref_name = 'hi'
-        # shunga o'xshash serializer yana boshqa joyda bo'lsa ref_name qo'yiladi
+        ref_name = 'UserProfile'
 
-
-class RecipesSerializer(serializers.ModelSerializer):
+class RecipeSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
-    recipe_likes_count = serializers.SerializerMethodField('get_recipe_likes_count')
-    recipe_comments_count = serializers.SerializerMethodField('get_recipe_comments_count')
-    me_liked = serializers.SerializerMethodField('get_me_liked')
-    me_saved = serializers.SerializerMethodField('get_me_saved')
+    recipe_likes_count = serializers.SerializerMethodField()
+    recipe_comments_count = serializers.SerializerMethodField()
+    me_liked = serializers.SerializerMethodField()
+    me_saved = serializers.SerializerMethodField()
+    categories = serializers.StringRelatedField(many=True)
 
     class Meta:
-        model = Recipes
+        model = Recipe
         fields = (
             "id",
             "title",
             "description",
-            'image',
+            "image",
             "cook_time",
             "serves",
             "views_number",
             "location",
             "author",
-            "category",
-            'created_at',
+            "categories",
+            "created_at",
             "recipe_likes_count",
             "recipe_comments_count",
             "me_liked",
@@ -39,58 +38,45 @@ class RecipesSerializer(serializers.ModelSerializer):
         extra_kwargs = {"image": {"required": False}}
 
     def get_recipe_likes_count(self, obj):
-        return obj.recipe_likes.count()
+        return obj.likes.count()
 
     def get_recipe_comments_count(self, obj):
-        return obj.recipe.count()
+        return obj.comments.count()
 
     def get_me_liked(self, obj):
-        request = self.context.get('request', None)
+        request = self.context.get('request')
         if request and request.user.is_authenticated:
-            try:
-                like = FoodLike.objects.get(recipe=obj, author=request.user)
-                return True
-            except FoodLike.DoesNotExist:
-                return False
-
+            return FoodLike.objects.filter(recipe=obj, author=request.user).exists()
         return False
 
     def get_me_saved(self, obj):
-        request = self.context.get('request', None)
+        request = self.context.get('request')
         if request and request.user.is_authenticated:
-            try:
-                like = SaveModel.objects.get(recipe=obj, author=request.user)
-                return True
-            except SaveModel.DoesNotExist:
-                return False
-
+            return SaveRecipe.objects.filter(recipe=obj, author=request.user).exists()
         return False
-
 
 class FoodLikeSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
-    recipe = RecipesSerializer(read_only=True)
+    recipe = RecipeSerializer(read_only=True)
 
     class Meta:
         model = FoodLike
         fields = ("id", "author", "recipe")
 
-
-class SaveSerializer(serializers.ModelSerializer):
+class SaveRecipeSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
-    recipe = RecipesSerializer(read_only=True)
+    recipe = RecipeSerializer(read_only=True)
 
     class Meta:
-        model = FoodLike
+        model = SaveRecipe
         fields = ("id", "author", "recipe")
-
 
 class CommentSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
-    replies = serializers.SerializerMethodField('get_replies')
-    me_liked = serializers.SerializerMethodField('get_me_liked')
-    likes_count = serializers.SerializerMethodField('get_likes_count')
-    replies_count = serializers.SerializerMethodField('get_replies_count')
+    replies = serializers.SerializerMethodField()
+    me_liked = serializers.SerializerMethodField()
+    likes_count = serializers.SerializerMethodField()
+    replies_count = serializers.SerializerMethodField()
 
     class Meta:
         model = FoodComment
@@ -108,27 +94,22 @@ class CommentSerializer(serializers.ModelSerializer):
         ]
 
     def get_replies(self, obj):
-        if obj.child.exists():
-            serializers = self.__class__(obj.child.all(), many=True, context=self.context)
-            return serializers.data
-        else:
-            return None
+        if obj.replies.exists():
+            serializer = self.__class__(obj.replies.all(), many=True, context=self.context)
+            return serializer.data
+        return None
 
-    def get_me_liked(self, obj):  # ---------- user bosgan like lar userga true korinishida boradi
+    def get_me_liked(self, obj):
         user = self.context.get('request').user
         if user.is_authenticated:
             return obj.likes.filter(author=user).exists()
-        else:
-            return False
+        return False
 
-    @staticmethod
-    def get_likes_count(obj):
+    def get_likes_count(self, obj):
         return obj.likes.count()
 
-    @staticmethod
-    def get_replies_count(obj):
-        return obj.child.count()
-
+    def get_replies_count(self, obj):
+        return obj.replies.count()
 
 class CommentLikeSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
